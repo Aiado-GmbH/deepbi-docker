@@ -23,7 +23,7 @@ RUN git clone https://github.com/DeepInsight-AI/DeepBI.git /app
 WORKDIR /app
 
 # Build frontend
-RUN yarn install && \
+RUN npm install --legacy-peer-deps && \
     NODE_ENV=production node --max-old-space-size=4096 node_modules/.bin/webpack
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
