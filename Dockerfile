@@ -22,19 +22,40 @@ RUN git clone https://github.com/DeepInsight-AI/DeepBI.git /app
 
 WORKDIR /app
 
-# Build frontend
-# Patch webpack config to alias fast-png ESM -> CJS (webpack 4 can't parse class fields)
+# Install JS deps
 RUN npm install --legacy-peer-deps
+
+# Add babel deps to handle fast-png ESM class fields (webpack 4 can't parse them)
+RUN npm install --no-save @babel/core @babel/preset-env @babel/plugin-proposal-class-properties babel-loader
+
+# Wrapper webpack config that patches the original to add a babel-loader rule for fast-png
 RUN node -e " \
-  const fs = require('fs'); \
-  const path = '/app/webpack.config.js'; \
-  let src = fs.readFileSync(path, 'utf8'); \
-  const alias = \`\n  // fast-png ships ESM with class fields; webpack 4 can't parse it\n  resolve: Object.assign({}, (module.exports.resolve || {}), {\n    alias: Object.assign({}, ((module.exports.resolve || {}).alias || {}), {\n      'fast-png': require.resolve('fast-png').replace(/lib-esm/, 'lib'),\n    })\n  }),\`; \
-  src = src.replace(/module\.exports\s*=\s*\{/, 'module.exports = {' + alias); \
-  fs.writeFileSync(path, src); \
-  console.log('Patched webpack.config.js'); \
-" && \
-    NODE_ENV=production node --max-old-space-size=4096 node_modules/.bin/webpack
+const fs = require('fs'); \
+const patch = \`\
+// Wrapper: add babel-loader for fast-png ESM (class fields incompatible with webpack 4)\n\
+delete require.cache[require.resolve('./webpack.config.js')];\n\
+const config = require('./webpack.config.js');\n\
+if (!config.module) config.module = {};\n\
+if (!config.module.rules) config.module.rules = [];\n\
+config.module.rules.push({\n\
+  test: /\\\\.js\$/,\n\
+  include: /node_modules\\\\/fast-png/,\n\
+  use: {\n\
+    loader: 'babel-loader',\n\
+    options: {\n\
+      presets: [['@babel/preset-env', { targets: { node: '16' } }]],\n\
+      plugins: ['@babel/plugin-proposal-class-properties'],\n\
+    },\n\
+  },\n\
+});\n\
+module.exports = config;\n\
+\`; \
+fs.writeFileSync('/app/webpack.config.patched.js', patch); \
+console.log('Written webpack.config.patched.js'); \
+"
+
+# Build frontend using patched config
+RUN NODE_ENV=production node --max-old-space-size=4096 node_modules/.bin/webpack --config webpack.config.patched.js
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PIP_NO_CACHE_DIR=1
