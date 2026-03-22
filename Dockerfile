@@ -12,9 +12,19 @@ RUN apt-get update && \
       libsasl2-modules-gssapi-mit && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js 16 and yarn
+RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g yarn && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 RUN git clone https://github.com/DeepInsight-AI/DeepBI.git /app
 
 WORKDIR /app
+
+# Build frontend
+RUN yarn install --frozen-lockfile && \
+    NODE_ENV=production yarn build
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PIP_NO_CACHE_DIR=1
