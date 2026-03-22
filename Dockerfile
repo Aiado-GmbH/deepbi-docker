@@ -23,7 +23,7 @@ RUN git clone https://github.com/DeepInsight-AI/DeepBI.git /app
 WORKDIR /app
 
 # Build frontend
-RUN yarn install --frozen-lockfile && \
+RUN yarn install && \
     NODE_ENV=production yarn build
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
