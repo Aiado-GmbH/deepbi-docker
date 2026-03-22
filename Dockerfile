@@ -26,7 +26,7 @@ WORKDIR /app
 RUN npm install --legacy-peer-deps
 
 # Add babel deps to handle fast-png ESM class fields (webpack 4 can't parse them)
-RUN npm install --no-save @babel/core @babel/preset-env @babel/plugin-proposal-class-properties babel-loader
+RUN npm install --no-save --legacy-peer-deps @babel/core @babel/preset-env @babel/plugin-proposal-class-properties babel-loader
 
 # Wrapper webpack config that patches the original to add a babel-loader rule for fast-png
 RUN node -e " \
