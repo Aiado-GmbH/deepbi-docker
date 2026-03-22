@@ -24,7 +24,7 @@ WORKDIR /app
 
 # Build frontend
 RUN yarn install && \
-    NODE_ENV=production yarn build
+    NODE_ENV=production node --max-old-space-size=4096 node_modules/.bin/webpack
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PIP_NO_CACHE_DIR=1
