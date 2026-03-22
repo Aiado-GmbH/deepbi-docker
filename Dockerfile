@@ -25,26 +25,34 @@ WORKDIR /app
 # Install JS deps
 RUN npm install --legacy-peer-deps
 
-# Add babel deps to handle fast-png ESM class fields (webpack 4 can't parse them)
-RUN npm install --no-save --legacy-peer-deps @babel/core @babel/preset-env @babel/plugin-proposal-class-properties babel-loader
+# Add babel deps to handle ESM class fields and modern syntax (webpack 4 / acorn 6 can't parse them)
+RUN npm install --no-save --legacy-peer-deps \
+      @babel/core @babel/preset-env babel-loader \
+      @babel/plugin-proposal-class-properties \
+      @babel/plugin-proposal-nullish-coalescing-operator \
+      @babel/plugin-proposal-optional-chaining
 
-# Wrapper webpack config that patches the original to add a babel-loader rule for fast-png
+# Wrapper webpack config: add babel-loader for fast-png + iobuffer (both use ESM class fields / ??)
 RUN node -e " \
 const fs = require('fs'); \
 const patch = \`\
-// Wrapper: add babel-loader for fast-png ESM (class fields incompatible with webpack 4)\n\
+// Wrapper: transpile ESM packages incompatible with webpack 4 acorn parser\n\
 delete require.cache[require.resolve('./webpack.config.js')];\n\
 const config = require('./webpack.config.js');\n\
 if (!config.module) config.module = {};\n\
 if (!config.module.rules) config.module.rules = [];\n\
 config.module.rules.push({\n\
   test: /\\\\.js\$/,\n\
-  include: /node_modules\\\\/fast-png/,\n\
+  include: /node_modules\\\\/(fast-png|iobuffer)/,\n\
   use: {\n\
     loader: 'babel-loader',\n\
     options: {\n\
-      presets: [['@babel/preset-env', { targets: { node: '16' } }]],\n\
-      plugins: ['@babel/plugin-proposal-class-properties'],\n\
+      presets: [['@babel/preset-env', { targets: { node: '10' }, loose: true }]],\n\
+      plugins: [\n\
+        ['@babel/plugin-proposal-class-properties', { loose: true }],\n\
+        '@babel/plugin-proposal-nullish-coalescing-operator',\n\
+        '@babel/plugin-proposal-optional-chaining',\n\
+      ],\n\
     },\n\
   },\n\
 });\n\
