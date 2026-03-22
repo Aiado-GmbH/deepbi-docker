@@ -23,7 +23,17 @@ RUN git clone https://github.com/DeepInsight-AI/DeepBI.git /app
 WORKDIR /app
 
 # Build frontend
-RUN npm install --legacy-peer-deps && \
+# Patch webpack config to alias fast-png ESM -> CJS (webpack 4 can't parse class fields)
+RUN npm install --legacy-peer-deps
+RUN node -e " \
+  const fs = require('fs'); \
+  const path = '/app/webpack.config.js'; \
+  let src = fs.readFileSync(path, 'utf8'); \
+  const alias = \`\n  // fast-png ships ESM with class fields; webpack 4 can't parse it\n  resolve: Object.assign({}, (module.exports.resolve || {}), {\n    alias: Object.assign({}, ((module.exports.resolve || {}).alias || {}), {\n      'fast-png': require.resolve('fast-png').replace(/lib-esm/, 'lib'),\n    })\n  }),\`; \
+  src = src.replace(/module\.exports\s*=\s*\{/, 'module.exports = {' + alias); \
+  fs.writeFileSync(path, src); \
+  console.log('Patched webpack.config.js'); \
+" && \
     NODE_ENV=production node --max-old-space-size=4096 node_modules/.bin/webpack
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
