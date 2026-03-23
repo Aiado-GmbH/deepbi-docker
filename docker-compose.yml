@@ -1,0 +1,196 @@
+services:
+
+  # ------------------------------------------------------------------
+  # Nginx — serves compiled static assets directly and proxies the
+  # Gunicorn backend. Traefik terminates TLS and routes to this.
+  # ------------------------------------------------------------------
+  nginx:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    depends_on:
+      - server
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Built frontend assets are populated into this volume by the
+      # server container on first start (Docker copies image contents
+      # into an empty named volume automatically).
+      - static_assets:/static:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.deepbi.rule=Host(`deepbi.ngohub.io`)
+      - traefik.http.routers.deepbi.entrypoints=https
+      - traefik.http.routers.deepbi.tls.certresolver=letsencrypt
+      - traefik.http.services.deepbi.loadbalancer.server.port=80
+
+  server:
+    build:
+      context: 'https://github.com/Aiado-GmbH/deepbi-docker.git#master'
+      args:
+        # These are baked into the frontend bundle at build time.
+        # REACT_APP_SOCKET_URL becomes process.env.SOCKET in the JS bundle.
+        WEB_LANGUAGE: EN
+        REACT_APP_SOCKET_URL: deepbi.ngohub.io/chat/
+    command: server
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    # Port 8338 is no longer exposed to Traefik directly — Nginx proxies to it.
+    # Keep the mapping for direct debug access only.
+    ports:
+      - '127.0.0.1:8338:8338'
+    volumes:
+      # Expose compiled frontend assets to Nginx via the shared volume.
+      # Docker will copy /app/client/dist contents into the empty volume on first start.
+      - static_assets:/app/client/dist
+    environment:
+      DEEPBI_LOG_LEVEL: INFO
+      DEEPBI_COOKIE_SECRET: xhTIGBtJVCvAHFmWqV2eAJgR9eicpLdL
+      DEEPBI_SECRET_KEY: Peb3s8rlCcd57JBpDHCVXH8OmXDAsbvR
+      DB_API_SECRET_KEY: LvovSEyTocLxZoKmPlk96d80jzfcov5t
+      DEEPBI_DATABASE_URL: 'postgresql://postgres@postgres/postgres'
+      DEEPBI_REDIS_URL: 'redis://redis:6379/0'
+      DEEPBI_FEATURE_ALLOW_CUSTOM_JS_VISUALIZATIONS: 'True'
+      DEEPBI_RATELIMIT_ENABLED: 'false'
+      DEEPBI_ENFORCE_CSRF: 'true'
+      DEEPBI_GUNICORN_TIMEOUT: '60'
+      DEEPBI_WEB_WORKERS: '4'
+      DEEPBI_CELERY_WORKERS: '4'
+      WEB_LANGUAGE: EN
+      WEB_SERVER: deepbi.ngohub.io
+      REACT_APP_SOCKET_URL: deepbi.ngohub.io/chat/
+      AI_WEB_SERVER: deepbi.ngohub.io
+      PYTHONUNBUFFERED: '0'
+      PYTHONIOENCODING: 'utf-8'
+      LANG: 'C.UTF-8'
+      LC_ALL: 'C.UTF-8'
+    # Traefik labels removed — Nginx is the public entry point now.
+
+  server_socket:
+    build:
+      context: 'https://github.com/Aiado-GmbH/deepbi-docker.git#master'
+      args:
+        WEB_LANGUAGE: EN
+        REACT_APP_SOCKET_URL: deepbi.ngohub.io/chat/
+    command: server_socket
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - '127.0.0.1:8339:8339'
+    environment:
+      DEEPBI_LOG_LEVEL: INFO
+      DEEPBI_COOKIE_SECRET: xhTIGBtJVCvAHFmWqV2eAJgR9eicpLdL
+      DEEPBI_SECRET_KEY: Peb3s8rlCcd57JBpDHCVXH8OmXDAsbvR
+      DB_API_SECRET_KEY: LvovSEyTocLxZoKmPlk96d80jzfcov5t
+      DEEPBI_DATABASE_URL: 'postgresql://postgres@postgres/postgres'
+      DEEPBI_REDIS_URL: 'redis://redis:6379/0'
+      WEB_LANGUAGE: EN
+      WEB_SERVER: deepbi.ngohub.io
+      REACT_APP_SOCKET_URL: deepbi.ngohub.io/chat/
+      AI_WEB_SERVER: deepbi.ngohub.io
+      PYTHONIOENCODING: 'utf-8'
+      LANG: 'C.UTF-8'
+      LC_ALL: 'C.UTF-8'
+
+  server_ai_api:
+    build:
+      context: 'https://github.com/Aiado-GmbH/deepbi-docker.git#master'
+      args:
+        WEB_LANGUAGE: EN
+        REACT_APP_SOCKET_URL: deepbi.ngohub.io/chat/
+    command: server_api
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - '127.0.0.1:8340:8340'
+    environment:
+      DEEPBI_LOG_LEVEL: INFO
+      DEEPBI_COOKIE_SECRET: xhTIGBtJVCvAHFmWqV2eAJgR9eicpLdL
+      DEEPBI_SECRET_KEY: Peb3s8rlCcd57JBpDHCVXH8OmXDAsbvR
+      DB_API_SECRET_KEY: LvovSEyTocLxZoKmPlk96d80jzfcov5t
+      DEEPBI_DATABASE_URL: 'postgresql://postgres@postgres/postgres'
+      DEEPBI_REDIS_URL: 'redis://redis:6379/0'
+      WEB_LANGUAGE: EN
+      WEB_SERVER: deepbi.ngohub.io
+      REACT_APP_SOCKET_URL: deepbi.ngohub.io/chat/
+      AI_WEB_SERVER: deepbi.ngohub.io
+      PYTHONIOENCODING: 'utf-8'
+      LANG: 'C.UTF-8'
+      LC_ALL: 'C.UTF-8'
+
+  scheduler:
+    build:
+      context: 'https://github.com/Aiado-GmbH/deepbi-docker.git#master'
+      args:
+        WEB_LANGUAGE: EN
+        REACT_APP_SOCKET_URL: deepbi.ngohub.io/chat/
+    command: scheduler
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      DEEPBI_LOG_LEVEL: INFO
+      DEEPBI_COOKIE_SECRET: xhTIGBtJVCvAHFmWqV2eAJgR9eicpLdL
+      DEEPBI_SECRET_KEY: Peb3s8rlCcd57JBpDHCVXH8OmXDAsbvR
+      DB_API_SECRET_KEY: LvovSEyTocLxZoKmPlk96d80jzfcov5t
+      DEEPBI_DATABASE_URL: 'postgresql://postgres@postgres/postgres'
+      DEEPBI_REDIS_URL: 'redis://redis:6379/0'
+      WEB_LANGUAGE: EN
+      WEB_SERVER: deepbi.ngohub.io
+      PYTHONIOENCODING: 'utf-8'
+      LANG: 'C.UTF-8'
+      LC_ALL: 'C.UTF-8'
+
+  worker:
+    build:
+      context: 'https://github.com/Aiado-GmbH/deepbi-docker.git#master'
+      args:
+        WEB_LANGUAGE: EN
+        REACT_APP_SOCKET_URL: deepbi.ngohub.io/chat/
+    command: worker
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      DEEPBI_LOG_LEVEL: INFO
+      DEEPBI_COOKIE_SECRET: xhTIGBtJVCvAHFmWqV2eAJgR9eicpLdL
+      DEEPBI_SECRET_KEY: Peb3s8rlCcd57JBpDHCVXH8OmXDAsbvR
+      DB_API_SECRET_KEY: LvovSEyTocLxZoKmPlk96d80jzfcov5t
+      DEEPBI_DATABASE_URL: 'postgresql://postgres@postgres/postgres'
+      DEEPBI_REDIS_URL: 'redis://redis:6379/0'
+      WEB_LANGUAGE: EN
+      WEB_SERVER: deepbi.ngohub.io
+      PYTHONUNBUFFERED: '0'
+      PYTHONIOENCODING: 'utf-8'
+      LANG: 'C.UTF-8'
+      LC_ALL: 'C.UTF-8'
+
+  postgres:
+    image: 'postgres:14-alpine'
+    restart: unless-stopped
+    command: >
+      postgres
+        -c fsync=off
+        -c full_page_writes=off
+        -c synchronous_commit=OFF
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      # Ensure the default database and template are created with UTF-8
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - 'deepbi_postgres:/var/lib/postgresql/data'
+
+  redis:
+    image: 'redis:7-alpine'
+    restart: unless-stopped
+    volumes:
+      - 'deepbi_redis:/data'
+
+volumes:
+  deepbi_postgres: null
+  deepbi_redis: null
+  # Shared volume for compiled frontend assets (webpack dist output).
+  # Populated from the server container image on first start; served by Nginx.
+  static_assets: null

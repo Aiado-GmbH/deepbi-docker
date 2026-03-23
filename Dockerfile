@@ -4,6 +4,11 @@ EXPOSE 8338 8339 8340
 
 ARG skip_dev_deps=yes
 
+# Build-time args that must be baked into the frontend bundle
+ARG WEB_LANGUAGE=EN
+ARG REACT_APP_SOCKET_URL
+ARG CDN_DOMAIN=""
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl gnupg build-essential pwgen libffi-dev sudo git-core \
@@ -62,11 +67,22 @@ fs.writeFileSync('/app/webpack.config.patched.js', patch); \
 console.log('Written webpack.config.patched.js'); \
 "
 
-# Build frontend using patched config
-RUN NODE_ENV=production node --max-old-space-size=4096 node_modules/.bin/webpack --config webpack.config.patched.js
+# Build frontend — pass build-time env vars so they are baked into the bundle.
+# WEB_LANGUAGE selects the language JS file (EN or ZH).
+# REACT_APP_SOCKET_URL is embedded via webpack DefinePlugin as process.env.SOCKET.
+RUN WEB_LANGUAGE=${WEB_LANGUAGE} \
+    REACT_APP_SOCKET_URL=${REACT_APP_SOCKET_URL} \
+    CDN_DOMAIN=${CDN_DOMAIN} \
+    NODE_ENV=production \
+    node --max-old-space-size=4096 node_modules/.bin/webpack --config webpack.config.patched.js
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PIP_NO_CACHE_DIR=1
+
+# Locale / encoding — ensures Python and subprocesses default to UTF-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV PYTHONIOENCODING=utf-8
 
 RUN pip install pip==20.2.4 && \
     pip install -r vrequment.txt
